@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSSC - Hearing Conservation System</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- ลบ Chart.js ออก เพราะเราเปลี่ยนไปใช้ CSS/HTML แทนแล้ว -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="loader" id="loader"><i class="fa-solid fa-spinner fa-spin"></i> กำลังประมวลผล...</div>
+
+    <!-- ================= TOP NAVIGATION ================= -->
+    <div class="top-navbar">
+        <div class="nav-brand">
+            <img src="image/ssclogo.png" alt="Logo" class="nav-logo">
+            <div class="nav-brand-text">
+                <span class="nav-brand-subtitle">SIAM STEEL SERVICE CENTER PLC.</span>
+                <span class="nav-brand-title">
+                    <i class="fa-solid fa-ear-listen text-accent"></i> Hearing System
+                </span>
+            </div>
+        </div>
+        
+        <div class="nav-menu">
+            <a href="#" class="active" onclick="switchPage('dashboard', this)">
+                <i class="fa-solid fa-chart-pie"></i> Dashboard
+            </a>
+            <a href="#" onclick="switchPage('noise', this)">
+                <i class="fa-solid fa-volume-high"></i> ข้อมูลเสียงพื้นที่
+            </a>
+            <a href="#" onclick="switchPage('employee', this)">
+                <i class="fa-solid fa-user-doctor"></i> ข้อมูลพนักงาน
+            </a>
+        </div>
+
+        <div class="nav-date" id="currentDate"></div>
+    </div>
+
+    <!-- ================= MAIN CONTENT ================= -->
+    <div class="content">
+
+        <!-- ============================================================
+             PAGE 1: DASHBOARD (EXECUTIVE VIEW)
+        ============================================================ -->
+        <div id="page-dashboard" class="page active">
+            
+            <!-- Alert แจ้งเตือนกลุ่มเสี่ยง -->
+            <div id="alertBox" class="alert-box" style="display: none;">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <div>
+                    <strong>แจ้งเตือนเลยกำหนดตรวจสุขภาพ!</strong><br>
+                    <span id="alertMessage"></span>
+                </div>
+                <button type="button" onclick="document.getElementById('alertBox').style.display='none'" class="close-btn">&times;</button>
+            </div>
+
+            <!-- Toolbar ด้านบน -->
+            <div class="toolbar-right" style="justify-content: space-between;">
+                <div class="dashboard-year-filter">
+                    <label><i class="fa-regular fa-calendar-check"></i> ข้อมูลประจำปี:</label>
+                    <select id="dashboardYearSelect" onchange="changeDashboardYear(this.value)">
+                        <option value="">กำลังโหลด...</option>
+                    </select>
+                </div>
+
+                <button type="button" onclick="openMissingCheckupModal()" class="btn-danger btn-lg">
+                    <i class="fa-solid fa-user-clock"></i> ดูรายชื่อกลุ่มผลิตที่ยังไม่ได้ตรวจหู
+                </button>
+            </div>
+
+            <!-- 1. KPI Cards -->
+            <div class="kpi-grid kpi-grid-center">
+                <div class="kpi-card blue">
+                    <div class="kpi-title">พนักงานทั้งหมด</div>
+                    <div class="kpi-value" id="kpiTotalEmp">-</div>
+                    <div class="kpi-sub">จำนวนพนักงานในระบบ</div>
+                    <i class="fa-solid fa-users kpi-icon"></i>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-title">พนักงานกลุ่มเสี่ยง</div>
+                    <div class="kpi-value" id="kpiRiskEmp">-</div>
+                    <div class="kpi-sub">มี Hearing Shift ≥ 15 dB</div>
+                    <i class="fa-solid fa-triangle-exclamation kpi-icon"></i>
+                </div>
+                <div class="kpi-card orange">
+                    <div class="kpi-title">พื้นที่เสียงดัง</div>
+                    <div class="kpi-sub" style="margin-top: -5px; margin-bottom: 5px;">(ปีที่เลือก)</div>
+                    <div class="kpi-value" id="kpiNoiseAreas">-</div>
+                    <i class="fa-solid fa-volume-high kpi-icon"></i>
+                </div>
+                <div class="kpi-card green">
+                    <div class="kpi-title">ความคืบหน้ามาตรการ</div>
+                    <div class="kpi-value" id="kpiActionProgress">-</div>
+                    <div class="kpi-sub">มาตรการที่ดำเนินการแล้ว</div>
+                    <i class="fa-solid fa-clipboard-check kpi-icon"></i>
+                </div>
+            </div>
+
+            <!-- 2. โซน Heatmap และ Action Status -->
+            <div class="charts-grid" style="grid-template-columns: 2fr 1fr;">
+                
+                <!-- Heatmap: แผนที่ความเสี่ยงพื้นที่ -->
+                <div class="chart-card">
+                    <div class="chart-title"><i class="fa-solid fa-map-location-dot"></i> แผนที่ระดับเสียง (Risk Heatmap)</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
+                        * สีแดง = TWA ≥ 85 dBA (อันตราย), สีเหลือง = เฝ้าระวัง, สีเขียว = ปลอดภัย
+                    </div>
+                    <!-- Container สำหรับวาด Grid สี่เหลี่ยมจาก JS -->
+                    <div id="heatmapContainer" class="heatmap-grid"></div>
+                </div>
+
+                <!-- Action Status: ความคืบหน้ามาตรการ -->
+                <div class="chart-card">
+                    <div class="chart-title"><i class="fa-solid fa-list-check"></i> สถานะมาตรการ (Actions)</div>
+                    <div id="actionStatusContainer">
+                        <!-- Progress Bars จะถูก Render จาก JS -->
+                    </div>
+                </div>
+
+            </div>
+            <!-- 🌟 กราฟแนวโน้มพนักงานกลุ่มเสี่ยง -->
+            <div class="chart-card mb-2">
+                <div class="chart-title"><i class="fa-solid fa-chart-line"></i> แนวโน้มจำนวนพนักงานกลุ่มเสี่ยง (5 ปีย้อนหลัง)</div>
+                <div class="chart-wrapper chart-wrapper-tall">
+                    <canvas id="riskTrendChart"></canvas>
+                </div>
+            </div>
+            <!-- 3. ตาราง Top 5 พนักงานเสี่ยง -->
+            <div class="table-card">
+                <div class="chart-title"><i class="fa-solid fa-user-injured"></i> Top 5 พนักงานที่ต้องเฝ้าระวัง (ผลต่างการได้ยินสูงสุด)</div>
+                <div id="topRiskTableContainer" class="table-scroll">
+                    <!-- ตารางจะถูก Render จาก JS -->
+                </div>
+            </div>
+            
+        </div> <!-- ปิด page-dashboard -->
+
+        <!-- ============================================================
+             PAGE 2: NOISE
+        ============================================================ -->
+        <div id="page-noise" class="page">
+
+            <!-- หน้ารายการ -->
+            <div id="noiseCardGrid">
+                <!-- Cards จะถูก Render จาก JS -->
+            </div>
+
+            <!-- มุมมองที่ 2: หน้าฟอร์มกรอกข้อมูล (Auto-Generate) -->
+            <div id="noiseFormView" style="display: none;">
+                <div class="form-card form-card-wide">
+                    <div class="profile-header">
+                        <h3 class="text-primary"><i class="fa-solid fa-file-invoice"></i> แบบบันทึกผลการตรวจวัดระดับความดังเสียง</h3>
+                        <button type="button" onclick="closeNoiseModal()" class="btn-warning btn-sm">
+                            <i class="fa-solid fa-arrow-left"></i> กลับไปหน้ารวม
+                        </button>
+                    </div>
+                    
+                    <p class="form-hint">จัดกลุ่มตามกลุ่มลูกจ้างที่สัมผัสเสียงใกล้เคียงกัน (SEG) - ข้อมูลพนักงานและจุดตรวจดึงจากฐานข้อมูลอัตโนมัติ</p>
+
+                    <form id="formNoise">
+                        <input type="hidden" id="noise_action_type" value="bulk_add">
+
+                        <div class="noise-toolbar">
+                            <div class="noise-toolbar-item">
+                                <label>วันที่ตรวจวัด <span class="text-required">*</span></label>
+                                <input type="date" id="n_survey_date" 
+                                       onchange="calculateBEYear(this.value, 'n_survey_year'); changeSurveyYear(document.getElementById('n_survey_year').value);" 
+                                       required>
+                            </div>
+                            <div class="noise-toolbar-item">
+                                <label>ปีที่ตรวจ (พ.ศ.) <span class="text-required">*</span></label>
+                                <input type="number" id="n_survey_year" placeholder="เช่น 2567" required 
+                                       onchange="changeSurveyYear(this.value)">
+                            </div>
+                            <div class="noise-toolbar-item noise-toolbar-item-lg">
+                                <label>ผู้ตรวจวัด <span class="text-required">*</span></label>
+                                <input type="text" id="n_surveyor" placeholder="ชื่อผู้ตรวจ" required>
+                            </div>
+                            <div class="noise-toolbar-item">
+                                <label>ประเภทการตรวจ</label>
+                                <select id="n_survey_type">
+                                    <option value="Area">Area (ตรวจพื้นที่)</option>
+                                    <option value="Personal">Personal (ตรวจส่วนบุคคล)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-scroll">
+                            <table class="noise-table">
+                                <thead>
+                                    <tr>
+                                        <th rowspan="2" class="col-point">พื้นที่ทำงาน<br>(Measurement Point)</th>
+                                        <th rowspan="2" class="col-hrs">ระยะเวลาปฏิบัติงาน<br>(ชั่วโมง)</th>
+                                        <th colspan="3" class="col-group-title">ผลการตรวจวัดระดับความดังเสียง</th>
+                                        <th colspan="3" class="col-group-title col-group-title-alt">การปรับปรุง (PPE)</th>
+                                    </tr>
+                                    <tr>
+                                        <th class="col-level">ระดับเสียง<br>(dBA) *</th>
+                                        <th class="col-twa">TWA 8 hr<br>(คำนวณ)</th>
+                                        <th class="col-result">ผลการประเมิน</th>
+                                        <th class="col-ppe">ประเภท PPE</th>
+                                        <th class="col-nrr">NRR (ขึ้นต่ำ)</th>
+                                        <th class="col-in-ear">ระดับเสียงในหู<br>(dBA)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="noiseFormTableBody">
+                                    <!-- Render จาก JS -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" onclick="closeNoiseModal()" class="btn-warning">ยกเลิก</button>
+                            <button type="submit" class="btn-success btn-lg"><i class="fa-solid fa-save"></i> บันทึกข้อมูล</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div> <!-- ปิด page-noise -->
+
+        <!-- ============================================================
+             PAGE 3: EMPLOYEE & ANALYSIS
+        ============================================================ -->
+        <div id="page-employee" class="page">
+            
+            <div class="employee-top-bar">
+                <div class="search-box-container">
+                    <input type="text" id="searchInput" placeholder="กรอกรหัสพนักงาน หรือ ชื่อ-นามสกุล เพื่อค้นหา..." autocomplete="off">
+                    <button type="button" onclick="searchEmployee()" class="btn-primary"><i class="fa-solid fa-search"></i> ค้นหา</button>
+                </div>
+                <button type="button" onclick="showAddEmployeeForm()" class="btn-success btn-lg">
+                    <i class="fa-solid fa-plus"></i> เพิ่มประวัติพนักงาน
+                </button>
+            </div>
+
+            <!-- PROFILE VIEW / EDIT -->
+            <div id="employeeProfile" style="display: none;">
+                
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <h3 id="empNameDisplay">ชื่อพนักงาน</h3>
+                        <div class="btn-group">
+                            <button type="button" onclick="printEmployeeReport()" class="btn-success">
+                                <i class="fa-solid fa-print"></i> พิมพ์รายงาน
+                            </button>
+                            <button type="button" onclick="openEditEmployeeModal()" class="btn-warning">
+                                <i class="fa-solid fa-edit"></i> แก้ไขข้อมูลทั่วไป
+                            </button>
+                        </div>
+                    </div>
+                    
+            <!-- เดิมเป็น class="grid-2 mt-2" ให้เปลี่ยนเป็น grid-3 -->
+            <!-- เดิมเป็น class="grid-2 mt-2" ให้เปลี่ยนเป็น grid-3 -->
+                <div id="empViewMode" class="grid-3 ">
+                    <!-- คอลัมน์ 1 -->
+                    <p><strong>รหัสพนักงาน:</strong> <span id="v_emp_id"></span></p>
+                    <p><strong>แผนก:</strong> <span id="v_dept"></span></p>
+                    <p><strong>ตำแหน่ง:</strong> <span id="v_position"></span></p>
+                    <p><strong>สถานะ:</strong> <span id="v_status"></span></p>
+                    <p><strong>ประเภทพนักงาน:</strong> <span id="v_emp_type">-</span></p>
+
+                    <!-- คอลัมน์ 2 -->
+                    <p><strong>วันเกิด:</strong> <span id="v_birth_date">-</span></p>
+                    <p><strong>อายุ:</strong> <span id="v_age">-</span> ปี</p>
+                    <p><strong>วันที่เริ่มงาน:</strong> <span id="v_start_date">-</span></p>
+                    <p><strong>จุดตรวจ / เครื่องจักร:</strong> <span id="v_measurement_point">-</span></p>
+
+                    <!-- คอลัมน์ 3 (ข้อมูลยาวๆ หรือต้องการเน้น) -->
+                    <p class="grid-full-3"><strong>ประวัติการแพทย์:</strong> <span id="v_medical_history">-</span></p>
+                </div>
+                </div>
+
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <div>
+                            <h4 class="text-primary"><i class="fa-solid fa-ear-listen"></i> ผลการตรวจการได้ยินล่าสุด</h4>
+                            <div id="latestHearingInfo" class="latest-hearing-info">ยังไม่มีประวัติการตรวจ</div>
+                        </div>
+                        <button type="button" onclick="openHearingModal()" class="btn-primary">
+                            <i class="fa-solid fa-plus"></i> เพิ่มผลการตรวจการได้ยินปีปัจจุบัน
+                        </button>
+                    </div>
+                    <div id="latestTestTableContainer" class="table-scroll"></div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-title">แนวโน้มการได้ยิน (Audiogram)</div>
+                    <div class="chart-wrapper chart-wrapper-tall"><canvas id="audiogramChart"></canvas></div>
+                </div>
+
+                <div class="table-card">
+                    <div class="chart-title">ประเมินระดับการได้ยิน</div>
+                    <div class="compare-box">
+                        <label>ปีฐาน:</label> <select id="selBaseline"></select>
+                        <label>เทียบกับปี:</label> <select id="selCompare"></select>
+                        <button type="button" onclick="calculateShift()" class="btn-warning btn-sm">คำนวณผลต่าง</button>
+                    </div>
+                    <div id="shiftResult" class="shift-box mb-2"></div>
+                    <div id="matrixTableContainer"></div>
+                </div>
+            </div> 
+
+            <!-- FORM: NEW EMPLOYEE -->
+            <div id="addEmployeeWrapper">
+                <div class="form-card form-card-wide">
+                    <div class="profile-header">
+                        <h3><i class="fa-solid fa-user-plus text-success"></i> ข้อมูลสุขภาพพนักงานใหม่</h3>
+                        <button type="button" onclick="hideAddEmployeeForm()" class="btn-warning btn-sm">
+                            <i class="fa-solid fa-times"></i> ปิดฟอร์ม
+                        </button>
+                    </div>
+                    
+                    <form id="formNewEmployee">
+                        <h4 class="section-title">1. ข้อมูลทั่วไป</h4>
+                        
+                        <div class="grid-4">
+                            <div>
+                                <label>รหัสพนักงาน</label>
+                                <input type="text" id="n_emp_id" placeholder="เช่น D100238" onblur="checkDuplicateId(this.value)" autocomplete="off" required>
+                                <small id="id_error_msg" class="error-text">⚠️ รหัสพนักงานนี้มีอยู่ในระบบแล้ว!</small>
+                            </div>
+                            <div>
+                                <label>คำนำหน้า</label>
+                                <div class="radio-group">
+                                    <label><input type="radio" name="n_title_radio" value="นาย" checked> นาย</label>
+                                    <label><input type="radio" name="n_title_radio" value="นาง"> นาง</label>
+                                    <label><input type="radio" name="n_title_radio" value="นางสาว"> นางสาว</label>
+                                </div>
+                            </div>
+                            <div><label>ชื่อ</label><input type="text" id="n_first_name" required></div>
+                            <div><label>นามสกุล</label><input type="text" id="n_last_name" required></div>
+                        </div>
+
+                        <div class="grid-4 mt-1">
+                            <div>
+                                <label>วันเกิด</label>
+                                <input type="date" id="n_birth_date" onchange="calculateAge(this.value, 'n_age')">
+                            </div>
+                            <div>
+                                <label>อายุ (ปี)</label>
+                                <input type="number" id="n_age" placeholder="..." class="input-readonly" readonly>
+                            </div>
+                            <div>
+                                <label>ประเภทพนักงาน</label>
+                                <select id="n_emp_type">
+                                    <option value="Direct">Direct (พนักงานประจำ)</option>
+                                    <option value="Contract">Contract (สัญญาจ้าง)</option>
+                                    <option value="Subcontractor">Subcontractor (ผู้รับเหมา)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>วันที่เริ่มงาน</label>
+                                <input type="date" id="n_start_date">
+                            </div>
+                        </div>
+
+                        <div class="mt-1">
+                            <label>ประวัติการแพทย์เพิ่มเติม</label>
+                            <input type="text" id="n_medical_history" placeholder="เช่น แพ้ยา, หูอักเสบ, ผ่าตัดหู...">
+                        </div>
+
+                        <div class="grid-3 mt-1">
+                            <div>
+                                <label>รหัสแผนก</label>
+                                <input type="text" id="n_dept_code" placeholder="เช่น 6101" oninput="lookupDepartment(this.value, 'n_dept_name')" autocomplete="off" required>
+                            </div>
+                            <div>
+                                <label>ชื่อแผนก</label>
+                                <input type="text" id="n_dept_name" placeholder="..." class="input-readonly" readonly>
+                            </div>
+                            <div>
+                                <label>ตำแหน่ง</label>
+                                <input type="text" id="n_position" placeholder="..." class="input-readonly" readonly>
+                            </div>
+                        </div>
+
+                        <div class="mt-1">
+                            <label>จุดตรวจ / เครื่องจักร <span class="text-required">*</span></label>
+                            <select id="n_measurement_point" onchange="updateMappedPointDisplay(this.value, 'n_mapped_point')" required>
+                                <option value="">-- จุดตรวจ / เครื่องจักร --</option>
+                                <!-- Populate จาก JS -->
+                            </select>
+                            <input type="hidden" id="n_mapped_point">
+                        </div>
+
+                        <h4 class="section-title">2. ผลการตรวจการได้ยินแรกเข้า (Baseline)</h4>
+                        <div>
+                            <label>วันที่ตรวจ</label>
+                            <input type="date" id="n_date" onchange="calculateBEYear(this.value, 'n_year')" required>
+                            <input type="hidden" id="n_year"> 
+                        </div>
+
+                        <div class="grid-7 mt-2">
+                            <div><label>R500</label><input type="number" id="n_r500"></div>
+                            <div><label>R1000</label><input type="number" id="n_r1000"></div>
+                            <div><label>R2000</label><input type="number" id="n_r2000"></div>
+                            <div><label>R3000</label><input type="number" id="n_r3000"></div>
+                            <div><label>R4000</label><input type="number" id="n_r4000"></div>
+                            <div><label>R6000</label><input type="number" id="n_r6000"></div>
+                            <div><label>R8000</label><input type="number" id="n_r8000"></div>
+                        </div>
+                        <div class="grid-7 mt-1">
+                            <div><label>L500</label><input type="number" id="n_l500"></div>
+                            <div><label>L1000</label><input type="number" id="n_l1000"></div>
+                            <div><label>L2000</label><input type="number" id="n_l2000"></div>
+                            <div><label>L3000</label><input type="number" id="n_l3000"></div>
+                            <div><label>L4000</label><input type="number" id="n_l4000"></div>
+                            <div><label>L6000</label><input type="number" id="n_l6000"></div>
+                            <div><label>L8000</label><input type="number" id="n_l8000"></div>
+                        </div>
+
+                        <div class="mt-3">
+                            <button type="submit" class="btn-success"><i class="fa-solid fa-save"></i> บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div id="noResult" class="no-result">
+                <i class="fa-solid fa-search fa-3x mb-2 text-muted"></i><br>ไม่พบข้อมูลพนักงาน
+            </div>
+        </div> <!-- ปิด page-employee -->
+
+    </div> <!-- ปิด div.content -->
+
+    <!-- ================= MODALS ================= -->
+    <div id="editEmployeeModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-user-pen"></i> แก้ไขข้อมูลทั่วไปพนักงาน</h3>
+                <button onclick="closeEditEmployeeModal()" class="close-btn">&times;</button>
+            </div>
+            
+            <form id="formEditEmp">
+                <div class="grid-2">
+                    <div><label>รหัสพนักงาน</label><input type="text" id="e_emp_id" required></div>
+                    <div>
+                        <label>คำนำหน้า</label>
+                        <select id="e_title">
+                            <option value="นาย">นาย</option>
+                            <option value="นาง">นาง</option>
+                            <option value="นางสาว">นางสาว</option>
+                        </select>
+                    </div>
+                    <div><label>ชื่อ</label><input type="text" id="e_first_name" required></div>
+                    <div><label>นามสกุล</label><input type="text" id="e_last_name" required></div>
+                </div>
+
+                <div class="grid-4 mt-1">
+                    <div>
+                        <label>วันเกิด</label>
+                        <input type="date" id="e_birth_date" onchange="calculateAge(this.value, 'e_age')">
+                    </div>
+                    <div>
+                        <label>อายุ (ปี)</label>
+                        <input type="number" id="e_age" class="input-readonly" readonly>
+                    </div>
+                    <div>
+                        <label>ประเภทพนักงาน</label>
+                        <select id="e_emp_type">
+                            <option value="Direct">Direct (พนักงานประจำ)</option>
+                            <option value="Contract">Contract (สัญญาจ้าง)</option>
+                            <option value="Subcontractor">Subcontractor (ผู้รับเหมา)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>วันที่เริ่มงาน</label>
+                        <input type="date" id="e_start_date">
+                    </div>
+                </div>
+
+                <div class="grid-2 mt-1">
+                    <div>
+                        <label>สถานะ</label>
+                        <select id="e_status">
+                            <option value="Active">Active (ทำงาน)</option>
+                            <option value="Resigned">Resigned (ลาออก)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>ประวัติการแพทย์เพิ่มเติม</label>
+                        <input type="text" id="e_medical_history" placeholder="เช่น แพ้ยา, หูอักเสบ...">
+                    </div>
+                </div>
+
+                <div class="mt-1">
+                    <label>จุดตรวจ / เครื่องจักร <span class="text-required">*</span></label>
+                    <select id="e_measurement_point" onchange="updateMappedPointDisplay(this.value, 'e_mapped_point')" required>
+                        <option value="">-- กรุณาเลือกจุดตรวจ / เครื่องจักร --</option>
+                    </select>
+                    <input type="hidden" id="e_mapped_point">
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" onclick="closeEditEmployeeModal()" class="btn-warning">ยกเลิก</button>
+                    <button type="submit" class="btn-success"><i class="fa-solid fa-save"></i> บันทึกการแก้ไข</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="hearingModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-notes-medical"></i> บันทึกผลการตรวจการได้ยิน</h3>
+                <button onclick="closeHearingModal()" class="close-btn">&times;</button>
+            </div>
+            
+            <form id="formAddHearing">
+                <input type="hidden" id="h_emp_id">
+                
+                <div class="grid-2 mb-1">
+                    <div>
+                        <label>วันที่ตรวจ <span class="text-required">*</span></label>
+                        <input type="date" id="h_date" onchange="calculateBEYear(this.value, 'h_year')" required>
+                    </div>
+                    <div>
+                        <label>ปี พ.ศ. <span class="text-required">*</span></label>
+                        <input type="text" id="h_year" class="input-readonly" readonly required>
+                    </div>
+                </div>
+                
+                <div class="grid-2 mb-1">
+                    <div>
+                        <label>ประเภทการตรวจ <span class="text-required">*</span></label>
+                        <select id="h_test_type">
+                            <option value="Annual">Annual (ตรวจประจำปี)</option>
+                            <option value="Confirm">Confirm (ตรวจยืนยันผล)</option>
+                            <option value="Pre-employment">Pre-employment (ตรวจแรกเข้า)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="ear-section">
+                    <h4 class="ear-section-title right">หูขวา (Right Ear)</h4>
+                    <div class="grid-7">
+                        <div><label>R500</label><input type="number" id="h_r500"></div>
+                        <div><label>R1000</label><input type="number" id="h_r1000"></div>
+                        <div><label>R2000</label><input type="number" id="h_r2000"></div>
+                        <div><label>R3000</label><input type="number" id="h_r3000"></div>
+                        <div><label>R4000</label><input type="number" id="h_r4000"></div>
+                        <div><label>R6000</label><input type="number" id="h_r6000"></div>
+                        <div><label>R8000</label><input type="number" id="h_r8000"></div>
+                    </div>
+                </div>
+
+                <div class="ear-section">
+                    <h4 class="ear-section-title left">หูซ้าย (Left Ear)</h4>
+                    <div class="grid-7">
+                        <div><label>L500</label><input type="number" id="h_l500"></div>
+                        <div><label>L1000</label><input type="number" id="h_l1000"></div>
+                        <div><label>L2000</label><input type="number" id="h_l2000"></div>
+                        <div><label>L3000</label><input type="number" id="h_l3000"></div>
+                        <div><label>L4000</label><input type="number" id="h_l4000"></div>
+                        <div><label>L6000</label><input type="number" id="h_l6000"></div>
+                        <div><label>L8000</label><input type="number" id="h_l8000"></div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" onclick="closeHearingModal()" class="btn-warning">ยกเลิก</button>
+                    <button type="submit" class="btn-success"><i class="fa-solid fa-save"></i> บันทึกผลตรวจใหม่</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="missingCheckupModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-user-clock text-danger"></i> พนักงานที่ยังไม่ได้ตรวจหูประจำปี</h3>
+                <button onclick="closeMissingCheckupModal()" class="close-btn">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="modal-filter">
+                    <div>
+                        <label>เลือกปีที่ต้องการตรวจสอบ (พ.ศ.)</label>
+                        <select id="missingCheckupYear" onchange="loadMissingCheckupList()"></select>
+                    </div>
+                    <div>
+                        <label>เลือกสาขา (Factory)</label>
+                        <select id="missingCheckupBranch" onchange="loadMissingCheckupList()">
+                            <option value="ALL">ทุกสาขา</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="modal-table-scroll">
+                    <table class="matrix-table">
+                        <thead class="sticky-header">
+                            <tr>
+                                <th class="text-center">รหัสพนักงาน</th>
+                                <th class="text-center">ชื่อ-นามสกุล</th>
+                                <th class="text-center hide-mobile">สาขา</th>
+                                <th class="text-center hide-mobile">แผนก</th>
+                                <th class="text-center">ตรวจล่าสุด (ปี)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missingCheckupTableBody">
+                            <!-- ข้อมูลจะถูกวาดด้วย JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" onclick="closeMissingCheckupModal()" class="btn-primary">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= SCRIPTS ================= -->
+    <script src="config.js" onerror="this.remove()"></script>
+    <script src="app.js"></script>
+    <!-- 🌟 อัปเดต dashboard.js เพื่อวาด Heatmap และ Actions -->
+    <script src="dashboard.js"></script>
+    <script src="noise.js"></script>
+    <script src="employee.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    // Effect สำหรับปุ่มโหลดข้อมูล Noise
+    const originalOpenNoiseModal = window.openNoiseModal;
+    window.openNoiseModal = function() {
+        const btn = document.getElementById('btnOpenNoiseForm');
+        if (btn) {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลด...';
+            btn.disabled = true;
+        }
+        
+        originalOpenNoiseModal().finally(() => {
+            setTimeout(() => {
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-solid fa-plus"></i> บันทึกผลตรวจรอบปีใหม่';
+                    btn.disabled = false;
+                }
+            }, 500);
+        });
+    };
+    </script>
+</body>
+</html>
