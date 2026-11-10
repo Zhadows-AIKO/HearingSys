@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>รายงานผลตรวจสุขภาพ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="config.js" onerror="this.remove()"></script>
+    <style>
+        :root {
+            --green-bg: #a9d18e;
+            --orange-bg: #f4b183;
+            --border-color: #000;
+            --text-color: #000;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background: #f0f0f0;
+            color: var(--text-color);
+            font-size: 11px;
+        }
+
+        .a4-page {
+            width: 210mm;
+            height: 297mm;
+            background: white;
+            margin: 20px auto;
+            padding: 10mm;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 5px;
+            flex-shrink: 0;
+        }
+        .header img { height: 50px; margin-right: 15px; }
+        .header-text h1 { font-size: 16px; margin-bottom: 2px; }
+        .header-text h2 { font-size: 14px; margin-bottom: 2px; }
+        .header-text p { font-size: 11px; margin-bottom: 2px; }
+
+        .main-content-grid {
+            display: grid;
+            grid-template-columns: 27% 33% 40%;
+            gap: 5px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .col { display: flex; flex-direction: column; gap: 5px; }
+
+        .section-title {
+            font-weight: bold;
+            padding: 3px 5px;
+            font-size: 11px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+        }
+        .bg-green { background-color: var(--green-bg); }
+        .bg-orange { background-color: var(--orange-bg); }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+            font-size: 10px;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 2px 4px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        td.text-left { text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+
+        .col-mid table td:first-child { width: 40%; text-align: left; }
+        .col-mid table td:last-child { width: 30%; text-align: left; color: #666; }
+
+        .hearing-table th { font-size: 10px; padding: 2px; }
+        .hearing-table td { font-weight: bold; font-size: 10px; }
+
+        .chart-container {
+            width: 100%;
+            height: 150px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 5px;
+            position: relative;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 10mm;
+            left: 10mm;
+            right: 10mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-top: 1px solid var(--border-color);
+            padding-top: 10px;
+        }
+        .footer-left { font-size: 11px; }
+        .footer-center { font-size: 11px; }
+        .footer-right { text-align: center; font-size: 11px; }
+        .signature-line { border-bottom: 1px dashed #000; width: 150px; margin: 5px auto; }
+
+        @page { size: A4 portrait; margin: 0; }
+        @media print {
+            body { background: white; margin: 0; padding: 0; }
+            .a4-page { box-shadow: none; margin: 0; width: 210mm; height: 297mm; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ================= ส่วนควบคุม (ซ่อนเมื่อพิมพ์) ================= -->
+    <div class="no-print" style="text-align: center; padding: 15px; background: #fff; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
+
+        <div>
+            <label for="searchEmpId" style="font-weight: bold; margin-right: 5px;">รหัสพนักงาน:</label>
+            <input type="text" id="searchEmpId" placeholder="กรอกเพื่อค้นหา..." style="padding: 6px 10px; font-size: 14px; border-radius: 4px; border: 1px solid #ccc; width: 150px;" onkeypress="if(event.key === 'Enter') loadEmployeeReport()">
+            <button onclick="loadEmployeeReport()" style="padding: 6px 15px; font-size: 14px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px; margin-left: 5px;">
+                <i class="fa-solid fa-search"></i> ค้นหา
+            </button>
+        </div>
+
+        <div style="width: 2px; height: 25px; background: #ccc;"></div>
+
+        <div>
+            <label for="yearSelect" style="font-weight: bold; margin-right: 5px;">เลือกปี:</label>
+            <select id="yearSelect" onchange="renderReport()" style="padding: 6px 10px; font-size: 14px; border-radius: 4px; border: 1px solid #ccc;">
+            </select>
+        </div>
+
+        <button onclick="window.print()" style="padding: 8px 20px; font-size: 14px; cursor: pointer; background: #1e3a8a; color: white; border: none; border-radius: 4px;">
+            <i class="fa-solid fa-print"></i> พิมพ์รายงาน / บันทึก PDF
+        </button>
+    </div>
+
+    <div class="a4-page" id="reportContent">
+        <div style="text-align: center; padding: 50px;">กรุณากรอกรหัสพนักงาน หรือเลือกจากหน้าหลัก</div>
+    </div>
+
+    <script>
+        const API_URL = (window.APP_CONFIG && window.APP_CONFIG.API_URL)
+            || 'https://script.google.com/macros/s/AKfycbxbF133aAvEfhFB-Pqxco2ZG_dHS4J3rtDhei-8SIkguAHSf32IAoU4yw74GIv_NoVQ7w/exec';
+
+        let globalEmpData = null;
+        let globalTestsData = [];
+        let reportChartInstance = null;
+
+        const esc = (s) => String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function evaluateHearing(value) {
+            if (value === '' || value === null || value === undefined || isNaN(value)) return '-';
+            return Number(value) > 25 ? '<span style="color:red;">การได้ยินลดลง</span>' : 'ปกติ';
+        }
+
+        async function loadEmployeeReport() {
+            const inputId = document.getElementById('searchEmpId').value.trim();
+            if (!inputId) return alert('กรุณากรอกรหัสพนักงาน');
+
+            const newUrl = `?emp_id=${inputId}`;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+
+            await fetchAndRender(inputId);
+        }
+
+        async function fetchAndRender(empId, selectedYearFromUrl = null) {
+            if (!empId) {
+                document.getElementById('reportContent').innerHTML = '<div style="text-align: center; padding: 50px;">กรุณากรอกรหัสพนักงาน</div>';
+                return;
+            }
+
+            document.getElementById('reportContent').innerHTML = '<div style="text-align: center; padding: 50px;">กำลังโหลดข้อมูล...</div>';
+
+            try {
+                const [resEmp, resTests] = await Promise.all([
+                    fetch(API_URL + '?action=getEmployees').then(r => r.json()),
+                    fetch(API_URL + `?action=getTestsByEmp&emp_id=${encodeURIComponent(empId)}`).then(r => r.json())
+                ]);
+
+                globalEmpData = resEmp.data.find(e => String(e.emp_id) === String(empId));
+                if (!globalEmpData) {
+                    document.getElementById('reportContent').innerHTML = `<h2 style="color:red; text-align:center;">ไม่พบข้อมูลพนักงานรหัส ${esc(empId)}</h2>`;
+                    return;
+                }
+
+                globalTestsData = resTests.data || [];
+
+                const yearSelect = document.getElementById('yearSelect');
+                yearSelect.innerHTML = '';
+
+                if (globalTestsData.length > 0) {
+                    globalTestsData.sort((a, b) => Number(b.exam_year) - Number(a.exam_year));
+                    let defaultIndex = 0;
+
+                    globalTestsData.forEach((test, index) => {
+                        const rawYear = Number(test.exam_year);
+                        const yearBE = rawYear > 2500 ? rawYear : rawYear + 543;
+
+                        const label = `ปี ${yearBE} (${test.test_type === 'Confirm' ? 'ยืนยัน' : (test.test_type === 'Pre-employment' ? 'ก่อนเริ่มงาน' : 'ประจำปี')})`;
+                        yearSelect.innerHTML += `<option value="${index}">${label}</option>`;
+
+                        if (selectedYearFromUrl && String(test.exam_year) === String(selectedYearFromUrl)) {
+                            defaultIndex = index;
+                        }
+                    });
+
+                    yearSelect.value = String(defaultIndex);
+                } else {
+                    const currentYearBE = new Date().getFullYear() + 543;
+                    yearSelect.innerHTML = `<option value="0">ปี ${currentYearBE} (ไม่มีประวัติ)</option>`;
+                }
+
+                renderReport();
+
+                const autoPrint = getQueryParam('print');
+                if (autoPrint === 'true') {
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        setTimeout(() => window.print(), 300);
+                    }));
+                }
+
+            } catch (error) {
+                document.getElementById('reportContent').innerHTML = `<h2 style="color:red; text-align:center;">เกิดข้อผิดพลาด: ${esc(error.message)}</h2>`;
+            }
+        }
+
+        function renderReport() {
+            // 🌟 แก้: parseInt
+            const selectedIdx = parseInt(document.getElementById('yearSelect').value, 10) || 0;
+            const emp = globalEmpData;
+
+            const selectedTest = (globalTestsData.length > 0 && globalTestsData[selectedIdx])
+                ? globalTestsData[selectedIdx]
+                : {};
+
+            const rFreqs = [500, 1000, 2000, 3000, 4000, 6000, 8000];
+            const rKeys = ['r500', 'r1000', 'r2000', 'r3000', 'r4000', 'r6000', 'r8000'];
+            const lKeys = ['l500', 'l1000', 'l2000', 'l3000', 'l4000', 'l6000', 'l8000'];
+
+            let hearingRows = '';
+            rFreqs.forEach((freq, idx) => {
+                const rVal = selectedTest[rKeys[idx]];
+                const lVal = selectedTest[lKeys[idx]];
+                hearingRows += `
+                    <tr>
+                        <td class="text-left" style="font-weight:bold; padding: 2px;">${freq} Hz</td>
+                        <td>${rVal || '-'}</td>
+                        <td>${evaluateHearing(rVal)}</td>
+                        <td>${lVal || '-'}</td>
+                        <td>${evaluateHearing(lVal)}</td>
+                    </tr>
+                `;
+            });
+
+            const hearingTableHTML = `
+                <table class="hearing-table" style="font-size: 10px; margin-bottom: 3px;">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="width: 20%;">ความถี่</th>
+                            <th colspan="2" style="background: #fee2e2; color:#b91c1c;">หูขวา</th>
+                            <th colspan="2" style="background: #e0f2fe; color:#0369a1;">หูซ้าย</th>
+                        </tr>
+                        <tr>
+                            <th>dB</th><th>แปลผล</th><th>dB</th><th>แปลผล</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${hearingRows}
+                    </tbody>
+                </table>
+            `;
+
+            // 🌟 แก้: แสดง "ยังไม่มีผลตรวจ" ถ้าไม่มีข้อมูล
+            let examDateText = '-';
+            if (selectedTest.exam_year) {
+                examDateText = (Number(selectedTest.exam_year) > 2500
+                    ? Number(selectedTest.exam_year)
+                    : Number(selectedTest.exam_year) + 543);
+            } else {
+                examDateText = 'ยังไม่มีผลตรวจ';
+            }
+
+            document.getElementById('reportContent').innerHTML = `
+                <div class="header">
+                    <img src="image/ssclogo.png" alt="Logo">
+                    <div class="header-text">
+                        <h1>บริษัท ศูนย์บริการเหล็กสยาม จำกัด (มหาชน)</h1>
+                        <h2>รายงานผลการตรวจสุขภาพประจำปี</h2>
+                        <p>วันที่ตรวจ: ${examDateText} | เลขที่เอกสาร: .......................</p>
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; line-height: 1.6; margin-bottom: 15px; border-bottom: 1px solid #000; padding-bottom: 10px; flex-shrink: 0;">
+                    <div style="display: flex; align-items: flex-end; margin-bottom: 8px;">
+                        <div style="width: 50%; white-space: nowrap;"><strong>ชื่อ - สกุล</strong> &nbsp;&nbsp; ${esc(emp.title || '')}${esc(emp.first_name)} ${esc(emp.last_name)}</div>
+                        <div style="width: 15%; white-space: nowrap;"><strong>อายุ</strong> &nbsp;&nbsp; ${esc(emp.age || '-')} &nbsp; ปี</div>
+                        <div style="width: 15%; white-space: nowrap;"><strong>รหัส</strong> &nbsp;&nbsp; ${esc(emp.emp_id)}</div>
+                        <div style="width: 20%; white-space: nowrap;"><strong>แผนก</strong> &nbsp;&nbsp; ${esc(emp.department || emp.dept_code || '-')}</div>
+                    </div>
+                    <div style="display: flex; align-items: flex-end; margin-bottom: 8px;">
+                        <div style="width: 25%; white-space: nowrap;"><strong>น้ำหนัก</strong> &nbsp;&nbsp; - &nbsp; กิโลกรัม</div>
+                        <div style="width: 25%; white-space: nowrap;"><strong>ส่วนสูง</strong> &nbsp;&nbsp; - &nbsp; เซนติเมตร</div>
+                        <div style="width: 25%; white-space: nowrap;"><strong>BMI</strong> &nbsp;&nbsp; - &nbsp; <u>แปลผล</u> &nbsp; -</div>
+                    </div>
+                    <div style="display: flex; align-items: flex-end; margin-bottom: 8px;">
+                        <div style="width: 25%; white-space: nowrap;"><strong>ส่วนสูง/2</strong> &nbsp;&nbsp; - &nbsp; เซนติเมตร</div>
+                        <div style="width: 25%; white-space: nowrap;"><strong>รอบพุง</strong> &nbsp;&nbsp; - &nbsp; เซนติเมตร</div>
+                        <div style="width: 25%; white-space: nowrap;"><u>แปลผล</u> &nbsp; -</div>
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <div style="width: 35%; white-space: nowrap;"><strong>ความดันโลหิต</strong> &nbsp;&nbsp; -/- &nbsp; ม.ม. ปรอท &nbsp; <u>แปลผล</u> &nbsp; -</div>
+                        <div style="width: 30%; white-space: nowrap;"><strong>ชีพจร</strong> &nbsp;&nbsp; - &nbsp; ครั้ง/นาที</div>
+                    </div>
+                </div>
+
+                <div class="main-content-grid">
+                    <div class="col col-left">
+                        <div class="section-title bg-green">ประวัติส่วนบุคคลและพฤติกรรมสุขภาพ</div>
+                        <table style="border: none;">
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">โรคประจำตัว</td><td style="border: none; text-align: center; width: 20%;">-</td></tr>
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">แพ้ยา</td><td style="border: none; text-align: center;">-</td></tr>
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">สูบบุหรี่</td><td style="border: none; text-align: center;">-</td></tr>
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">สุรา</td><td style="border: none; text-align: center;">-</td></tr>
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">รสชาติอาหาร</td><td style="border: none; text-align: center;">-</td></tr>
+                            <tr><td class="text-left" style="border: none; padding-left: 5px;">ออกกำลังกาย</td><td style="border: none; text-align: center;">-</td></tr>
+                        </table>
+
+                        <div class="section-title bg-green">ผลตรวจสมรรถภาพกล้ามเนื้อ</div>
+                        <table style="border: none;">
+                            <tr>
+                                <th class="text-left" style="border: none; padding-left: 5px; font-weight: normal;">รายการตรวจ</th>
+                                <th style="border: none; text-align: center; font-weight: normal;">แปลผล</th>
+                            </tr>
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px;">วัดแรงเหยียดหลัง</td><td style="border: none; text-align: center;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px;">วัดความอ่อนตัว</td><td style="border: none; text-align: center;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px;">วัดแรงบีบมือ</td><td style="border: none; text-align: center;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                        </table>
+
+                        <div class="section-title bg-green">ผลตรวจเอกซเรย์ปอด</div>
+                        <table style="border: none;">
+                            <tr><td style="border: none; text-align: center; height: 40px; vertical-align: top;">-</td></tr>
+                        </table>
+
+                        <div class="section-title bg-green">ผลตรวจปัสสาวะ (Urinalysis)</div>
+                        <table style="border: none; font-size: 10px;">
+                            <tr>
+                                <th class="text-left" style="border: none; padding-left: 5px; font-weight: normal;">รายการตรวจ</th>
+                                <th style="border: none; text-align: center; font-weight: normal;">ผลตรวจ</th>
+                                <th style="border: none; text-align: center; font-weight: normal;">ค่าปกติ</th>
+                            </tr>
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">pH</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(4.6-8)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Specific gravity</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(1.003-1.030)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Sugar</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(Negative)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Protein</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(Negative)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Ketone</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(Negative)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">RBC</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(0-2)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">WBC</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(0-2)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Epithelial cell</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(0-5)</td>
+                            </tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Bacteria</td><td style="border: none; text-align: center;">-</td><td style="border: none; text-align: left;">(Negative)</td>
+                            </tr>
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">แปลผล</td>
+                                <td style="border: none; text-align: center;">-</td>
+                                <td style="border: none;"></td>
+                            </tr>
+                        </table>
+
+                        <div class="section-title bg-orange" style="text-align: center; font-weight: bold; color: #000;">ผลตรวจหาสารตัวทำละลายในปัสสาวะ</div>
+                        <table style="border: none; font-size: 10px;">
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Xylene</td>
+                                <td style="border: none; text-align: center; width: 20%;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold; text-decoration: underline;">แปลผล</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                        </table>
+
+                        <div class="section-title bg-green" style="text-align: center; font-weight: bold;">ผลตรวจอุจจาระ</div>
+                        <table style="border: none; font-size: 10px;">
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Parasite and OVA</td>
+                                <td style="border: none; text-align: center; width: 20%;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">Protozoa</td>
+                                <td style="border: none; text-align: center;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold;">other</td>
+                                <td style="border: none; text-align: center;">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 5px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; font-weight: bold; text-decoration: underline;">แปลผล</td>
+                                <td style="border: none; text-align: center;">-</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="col col-mid">
+                        <div class="section-title bg-orange">ผลตรวจความสมบูรณ์ของเม็ดเลือด (CBC)</div>
+                        <table>
+                            <tr><td>HGB</td><td>-</td><td>(F 12-16, M 13-16)</td></tr>
+                            <tr><td>HCT</td><td>-</td><td>(36-54)</td></tr>
+                            <tr><td>WBC</td><td>-</td><td>(4,000-10,000)</td></tr>
+                            <tr><td>Neutrophil (%)</td><td>-</td><td>(50-70)</td></tr>
+                            <tr><td>Lymphocyte (%)</td><td>-</td><td>(20-40)</td></tr>
+                            <tr><td>Eosinophil (%)</td><td>-</td><td>(0.5-5)</td></tr>
+                            <tr><td>Monocyte (%)</td><td>-</td><td>(3-12)</td></tr>
+                            <tr><td>Platelet</td><td>-</td><td>(140,000-400,000)</td></tr>
+                            <tr><td>MCV</td><td>-</td><td>(80-100 fl)</td></tr>
+                            <tr><td>MCH</td><td>-</td><td>(27-34 Pg)</td></tr>
+                            <tr><td>MCHC</td><td>-</td><td>(32-36 g/dl)</td></tr>
+                        </table>
+                        <div class="section-title bg-orange">น้ำตาลในเลือด</div>
+                        <table><tr><td>FBS</td><td>-</td><td>(70-99 mg/dl)</td></tr></table>
+                        <div class="section-title bg-orange">ไขมันในเลือด</div>
+                        <table>
+                            <tr><td>Cholesterol</td><td>-</td><td>(0-200 mg/dl)</td></tr>
+                            <tr><td>Triglycerides</td><td>-</td><td>(0-160 mg/dL)</td></tr>
+                            <tr><td>HDL</td><td>-</td><td>(35-85 mg/dL)</td></tr>
+                            <tr><td>LDL</td><td>-</td><td>(0-130 mg/dL)</td></tr>
+                        </table>
+                        <div class="section-title bg-orange">ผลตรวจการทำงานของไต</div>
+                        <table><tr><td>Creatinine</td><td>-</td><td>(0.60-1.40 mg/dl)</td></tr></table>
+                        <div class="section-title bg-orange">ตรวจหาเชื้อไวรัสตับอักเสบบี</div>
+                        <table><tr><td>HBsAg</td><td>-</td><td></td></tr></table>
+                        <div class="section-title bg-orange">ตรวจคัดกรองมะเร็งปากมดลูก</div>
+                        <table><tr><td>Pap Smear</td><td>-</td><td></td></tr></table>
+                    </div>
+
+                    <div class="col col-right">
+                        <div class="section-title bg-green">ผลตรวจสมรรถภาพการได้ยิน</div>
+
+                        <div class="chart-container" style="height: 150px; margin-bottom: 3px;">
+                            <canvas id="reportAudiogramChart"></canvas>
+                        </div>
+
+                        ${hearingTableHTML}
+
+                        <div class="section-title bg-green" style="font-size: 11px; padding: 3px;">คำแนะนำ</div>
+                        <table style="border: none; font-size: 10px; margin-bottom: 3px;">
+                            <tr>
+                                <td style="border: none; padding: 3px; text-align: left;">
+                                    ควรพบแพทย์เพื่อตรวจยืนยัน, สวมใส่อุปกรณ์ป้องกันเสียง เมื่อทำงานสัมผัสเสียงดัง
+                                </td>
+                            </tr>
+                        </table>
+
+                        <div class="section-title bg-orange" style="font-size: 11px; padding: 3px;">ผลตรวจสมรรถภาพการมองเห็น</div>
+                        <table style="border: none; font-size: 10px; margin-bottom: 3px;">
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">การมองระยะไกล</td>
+                                <td style="border: none; text-align: center; width: 20%; color: var(--danger);">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">การมองระยะใกล้</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">การมองภาพ 3 มิติ</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">การมองภาพสี</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">ความสมดุลกล้ามเนื้อ</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                            <tr><td colspan="2" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px;">ลานสายตา</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                            </tr>
+                        </table>
+
+                        <div class="section-title bg-orange" style="font-size: 11px; padding: 3px;">ผลตรวจสมรรถภาพปอด</div>
+                        <table style="border: none; font-size: 10px;">
+                            <tr style="border-top: 1px dashed #ccc;">
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px; font-weight: bold;">FVC</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                                <td style="border: none; text-align: right; padding-right: 5px;">&gt; 80</td>
+                            </tr>
+                            <tr><td colspan="3" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px; font-weight: bold;">FEV1</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                                <td style="border: none; text-align: right; padding-right: 5px;">&gt; 80</td>
+                            </tr>
+                            <tr><td colspan="3" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px; font-weight: bold;">FEV1/FVC</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                                <td style="border: none; text-align: right; padding-right: 5px;">&gt; 75</td>
+                            </tr>
+                            <tr><td colspan="3" style="border: none; border-bottom: 1px dashed #ccc; height: 2px;"></td></tr>
+                            <tr>
+                                <td class="text-left" style="border: none; padding-left: 5px; padding-top: 2px; padding-bottom: 2px; font-weight: bold;">FEF 25% - 75%</td>
+                                <td style="border: none; text-align: center; color: var(--danger);">-</td>
+                                <td style="border: none; text-align: right; padding-right: 5px;">&gt; 65</td>
+                            </tr>
+                            <tr><td colspan="3" style="border: none; border-bottom: 1px dashed #000; height: 2px;"></td></tr>
+                            <tr>
+                                <td colspan="3" style="border: none; text-align: center; font-weight: bold; text-decoration: underline; padding-top: 2px;">แปลผล</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" style="border: none; text-align: center; height: 20px; color: var(--danger);">-</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <div class="footer-left">
+                        <strong>ตรวจร่างกายโดยแพทย์</strong><br>
+                        แพทย์อาชีวเวชศาสตร์
+                    </div>
+                    <div class="footer-center"></div>
+                    <div class="footer-right">
+                        <div class="signature-line"></div>
+                        <strong>รอปรับปรุงข้อมูล</strong><br>
+                        ( แพทย์ผู้ตรวจ )
+                    </div>
+                </div>
+            `;
+
+            const ctx = document.getElementById('reportAudiogramChart').getContext('2d');
+            if (reportChartInstance) reportChartInstance.destroy();
+
+            // 🌟 แก้: null-safe mapping
+            const mapVals = (keys) => keys.map(k => {
+                const v = selectedTest[k];
+                if (v === '' || v === null || v === undefined) return null;
+                const n = Number(v);
+                return isNaN(n) ? null : n;
+            });
+
+            reportChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['500', '1k', '2k', '3k', '4k', '6k', '8k'],
+                    datasets: [
+                        {
+                            label: 'หูขวา',
+                            data: mapVals(rKeys),
+                            borderColor: '#ef4444',
+                            backgroundColor: '#ef4444',
+                            pointStyle: 'circle',
+                            pointRadius: 5,
+                            borderWidth: 2,
+                            tension: 0.3,
+                            spanGaps: true
+                        },
+                        {
+                            label: 'หูซ้าย',
+                            data: mapVals(lKeys),
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f6',
+                            pointStyle: 'crossRot',
+                            pointRadius: 6,
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.3,
+                            spanGaps: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            reverse: true,
+                            min: -10,
+                            max: 120,
+                            ticks: { stepSize: 10, font: { size: 10 } },
+                            grid: { color: '#ccc' }
+                        },
+                        x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const empId = getQueryParam('emp_id');
+            const selectedYearFromUrl = getQueryParam('year');
+
+            if (empId) {
+                document.getElementById('searchEmpId').value = empId;
+                fetchAndRender(empId, selectedYearFromUrl);
+            }
+        });
+    </script>
+    
+</body>
+</html>
