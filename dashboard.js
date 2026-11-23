@@ -27,7 +27,7 @@ function safeJson(res) {
 }
 function asArray(x) { return Array.isArray(x) ? x : []; }
 function normalizePointKey(s) {
-    return String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return String(s || '').trim().toUpperCase().replace(/\s+/g, ''); // ลบช่องว่างออกทั้งหมด
 }
 function buildFullName(emp) {
     if (!emp) return '(ไม่ระบุชื่อ)';
