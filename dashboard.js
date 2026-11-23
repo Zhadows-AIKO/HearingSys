@@ -418,8 +418,9 @@ function renderHeatmap(currentYearNoise, activeEmps) {
     currentYearNoise.forEach(n => {
         const pt = n.measurement_point;
         if (!pt) return;
-        if (!pointData[pt]) pointData[pt] = [];
-        pointData[pt].push(Number(n.twa_dba));
+        const ptKey = normalizePointKey(pt); // 🌟 แปลงชื่อจุดตรวจให้เป็นตัวพิมพ์ใหญ่/ตัดช่องว่างซะตั้งแต่แรก
+        if (!pointData[ptKey]) pointData[ptKey] = [];
+        pointData[ptKey].push(Number(n.twa_dba));
     });
 
     let html = '';
