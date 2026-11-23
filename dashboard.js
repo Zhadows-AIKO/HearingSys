@@ -23,8 +23,11 @@ function safeJson(res) {
 }
 function asArray(x) { return Array.isArray(x) ? x : []; }
 function normalizePointKey(s) {
-    // ลบช่องว่างทั้งหมด และแปลงเป็นตัวพิมพ์ใหญ่
-    return String(s || '').trim().toUpperCase().replace(/\s+/g, ''); 
+    if (!s) return '';
+    // แปลงเป็นตัวพิมพ์ใหญ่, ลบช่องว่าง, และลบอักขระพิเศษทั้งหมด (เหลือแค่ A-Z และ 0-9)
+    return String(s)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, ''); 
 }
 function buildFullName(emp) {
     if (!emp) return '(ไม่ระบุชื่อ)';
