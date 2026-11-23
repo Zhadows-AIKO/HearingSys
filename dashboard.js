@@ -1,13 +1,9 @@
 // ==========================================
-// DASHBOARD.JS - Executive Dashboard V15.6 (Bug-fixed)
-// การเปลี่ยนแปลงจาก V15.5:
-//  [FIX-1] ย้ายการวาดกราฟ Trend ออกจากลูป forEach (เดิมสร้างซ้ำทุกพนักงาน)
-//  [FIX-2] แก้การคำนวณ shift: รับค่า 0/ลบ, กัน worstFreq='-', ไม่ให้ shift ติดลบ
-//  [FIX-3] แยกนับ "พนักงานในพื้นที่เสียง" vs "พนักงานมี STS ≥ 15 dB"
-//  [FIX-4] กันชื่อพนักงานเป็น undefined
-//  [FIX-5] เปลี่ยนปี -> ตรวจ cache ก่อน reload
-//  [FIX-6] เลือก noise record แบบ worst-case (TWA สูงสุด) แทน .find() ตัวแรก
-//  [FIX-7] กรณีไม่มีข้อมูลเพียงพอสำหรับ trend chart
+// DASHBOARD.JS - Executive Dashboard V15.7 (Fixed Heatmap Matching)
+// การเปลี่ยนแปลงจาก V15.6:
+//  [FIX-HEATMAP] แก้ปัญหาจำนวนพนักงานใน Heatmap ขึ้น 0 
+//                โดยการ Normalize ชื่อจุดตรวจ (Point) ให้ตรงกันก่อนเปรียบเทียบ
+//  [FIX-HEATMAP] ดึงชื่อจุดตรวจแบบดั้งเดิม (Original Name) กลับมาโชว์บนการ์ด
 // ==========================================
 
 const NOISE_LIMIT = (window.APP_CONFIG && window.APP_CONFIG.NOISE_LIMIT_DBA) || 85;
@@ -16,7 +12,7 @@ const STS_LIMIT   = (window.APP_CONFIG && window.APP_CONFIG.STS_SHIFT_DB) || 15;
 let globalDashboardData = { employees: [], tests: [], noise: [], mapping: [], actions: [] };
 let selectedDashboardYear = null;
 
-const DASHBOARD_CACHE_KEY  = 'dashboard_cache_v5';
+const DASHBOARD_CACHE_KEY  = 'dashboard_cache_v6'; // เปลี่ยน Version Cache
 const DASHBOARD_CACHE_TIME = 5 * 60 * 1000;
 
 // ==========================================
@@ -27,7 +23,8 @@ function safeJson(res) {
 }
 function asArray(x) { return Array.isArray(x) ? x : []; }
 function normalizePointKey(s) {
-    return String(s || '').trim().toUpperCase().replace(/\s+/g, ''); // ลบช่องว่างออกทั้งหมด
+    // ลบช่องว่างทั้งหมด และแปลงเป็นตัวพิมพ์ใหญ่
+    return String(s || '').trim().toUpperCase().replace(/\s+/g, ''); 
 }
 function buildFullName(emp) {
     if (!emp) return '(ไม่ระบุชื่อ)';
@@ -125,7 +122,6 @@ function initDashboardYearDropdown() {
 
 function changeDashboardYear(year) {
     selectedDashboardYear = year;
-    // [FIX-5] ถ้าปีที่เลือกไม่มีใน cache ปัจจุบัน ให้ลองโหลดใหม่
     const cachedYears = new Set((globalDashboardData.noise || []).map(n => Number(n.survey_year)));
     if (cachedYears.size > 0 && !cachedYears.has(Number(year))) {
         sessionStorage.removeItem(DASHBOARD_CACHE_KEY);
@@ -166,7 +162,6 @@ function renderDashboardUI() {
 
         empInNoiseAreaCount++;
 
-        // [FIX-6] เลือก record worst-case (TWA สูงสุด) ของจุดนั้น
         const pointNoiseRecords = currentYearNoise.filter(
             n => normalizePointKey(n.measurement_point) === empPoint
         );
@@ -203,7 +198,6 @@ function renderDashboardUI() {
             freqs.forEach(f => {
                 const bRaw = baseline[f];
                 const lRaw = latest[f];
-                // [FIX-2] กันค่าว่างเท่านั้น (ยอมรับ 0 และค่าลบ)
                 if (isBlank(bRaw) || isBlank(lRaw)) return;
                 const bVal = Number(bRaw);
                 const lVal = Number(lRaw);
@@ -217,7 +211,6 @@ function renderDashboardUI() {
             });
 
             if (worstFreq !== null) {
-                // [FIX-2] shift ติดลบ = ดีขึ้น → แสดงเป็น 0
                 shiftVal = maxShift > 0 ? maxShift : 0;
                 const earLabel = worstFreq.startsWith('r') ? 'ขวา' : 'ซ้าย';
                 const freqNum = worstFreq.slice(1);
@@ -231,7 +224,6 @@ function renderDashboardUI() {
 
         riskEmpsList.push({
             emp_id: emp.emp_id,
-            // [FIX-4] ใช้ buildFullName กัน undefined
             name: buildFullName(emp),
             dept: emp.department || '-',
             shift: shiftVal,
@@ -249,13 +241,11 @@ function renderDashboardUI() {
 
     const empWithSTSCount = riskEmpsList.filter(e => e.isSTS).length;
 
-    // [FIX-1] กราฟ Trend วาดนอก forEach
     renderTrendChart(noise, activeEmps);
 
     // --- อัปเดต KPI ---
     document.getElementById('kpiTotalEmp').innerText = activeEmps.length;
 
-    // [FIX-3] KPI ใช้ STS เป็นตัวหลัก, sub แสดงจำนวนในพื้นที่เสียง
     document.getElementById('kpiRiskEmp').innerText = empWithSTSCount;
     const riskSub = document.getElementById('kpiRiskEmp').parentElement.querySelector('.kpi-sub');
     if (riskSub) {
@@ -315,7 +305,6 @@ function renderTrendChart(noise, activeEmps) {
     const selectedYr = Number(selectedDashboardYear);
     const validYears = allNoiseYears.filter(y => y <= selectedYr).slice(-5);
 
-    // [FIX-7] ไม่มีข้อมูลเพียงพอ
     if (validYears.length === 0) {
         if (window.riskTrendChartInstance) {
             window.riskTrendChartInstance.destroy();
@@ -403,7 +392,7 @@ function renderTrendChart(noise, activeEmps) {
 }
 
 // ==========================================
-// 3.2 Heatmap
+// 3.2 Heatmap (🌟 แก้ไขบั๊กจำนวนคนเป็น 0 แล้ว)
 // ==========================================
 function renderHeatmap(currentYearNoise, activeEmps) {
     const heatmapContainer = document.getElementById('heatmapContainer');
@@ -415,31 +404,43 @@ function renderHeatmap(currentYearNoise, activeEmps) {
     }
 
     const pointData = {};
+    const originalNames = {}; // 🌟 เก็บชื่อจุดตรวจแบบดั้งเดิมไว้โชว์
+
     currentYearNoise.forEach(n => {
         const pt = n.measurement_point;
         if (!pt) return;
-        const ptKey = normalizePointKey(pt); // 🌟 แปลงชื่อจุดตรวจให้เป็นตัวพิมพ์ใหญ่/ตัดช่องว่างซะตั้งแต่แรก
-        if (!pointData[ptKey]) pointData[ptKey] = [];
+        
+        // 🌟 สร้าง Key กลางที่ตัดช่องว่างและเป็นตัวพิมพ์ใหญ่
+        const ptKey = normalizePointKey(pt); 
+        
+        if (!pointData[ptKey]) {
+            pointData[ptKey] = [];
+            originalNames[ptKey] = pt; // เก็บชื่อดั้งเดิมครั้งแรกที่เจอ
+        }
         pointData[ptKey].push(Number(n.twa_dba));
     });
 
     let html = '';
-    Object.keys(pointData).sort().forEach(pt => {
-        const maxTwa = Math.max(...pointData[pt]);
+    Object.keys(pointData).sort().forEach(ptKey => {
+        const maxTwa = Math.max(...pointData[ptKey]);
         const isDanger = maxTwa >= NOISE_LIMIT;
         const isWarning = maxTwa >= 80 && maxTwa < NOISE_LIMIT;
 
+        // 🌟 นับจำนวนพนักงานโดยใช้ Key กลางในการเทียบ
         const empCount = activeEmps.filter(e =>
-            normalizePointKey(e.measurement_point) === normalizePointKey(pt)
+            normalizePointKey(e.measurement_point) === ptKey
         ).length;
 
         let bgClass = 'safe';
         if (isDanger) bgClass = 'danger';
         else if (isWarning) bgClass = 'warning';
 
+        // 🌟 ดึงชื่อดั้งเดิมกลับมาใช้แสดงผล
+        const displayName = originalNames[ptKey] || ptKey;
+
         html += `
-            <div class="heatmap-card ${bgClass}" title="จุดตรวจ: ${pt}\nค่า TWA: ${maxTwa} dBA\nพนักงาน: ${empCount} คน">
-                <div class="heatmap-point">${pt}</div>
+            <div class="heatmap-card ${bgClass}" title="จุดตรวจ: ${displayName}\nค่า TWA: ${maxTwa} dBA\nพนักงาน: ${empCount} คน">
+                <div class="heatmap-point">${displayName}</div>
                 <div class="heatmap-value">${maxTwa}</div>
                 <div class="heatmap-emp"><i class="fa-solid fa-users"></i> ${empCount}</div>
             </div>
@@ -460,7 +461,7 @@ function renderActionStatus(currentYearActions, totalActions, completedActions, 
         return;
     }
 
-    const types = ['แจ้งผลพนักงาน', 'นัดตรวจยืนยัน (Confirm)', 'จ่าย PPE'];
+    const types = ['แจ้งผลพนักงาน', 'นัดตรวจยืนยัน (Confirm)', 'จ่าย PPE', 'ส่งพบแพทย์'];
     let progressHtml = `
         <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: bold; color: var(--primary);">ภาพรวมความคืบหน้า</span>
